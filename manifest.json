@@ -1,0 +1,22 @@
+{
+	"name": "Chef",
+	"version": "2.0.0",
+	"description": "Expert in cookies.",
+	"background_page": "background.html",
+	"permissions": [
+		"cookies",
+		"tabs",
+		"*://*/*"
+	],
+	"icons":
+	{
+		"16": "chef.16.png",
+		"48": "chef.48.png",
+		"128": "chef.128.png"
+	},
+	"browser_action":
+	{
+		"default_title": "Click to filter cookies by current tab, double click to open manager.",
+		"default_icon": "icon-toolbar.png"
+	}
+}

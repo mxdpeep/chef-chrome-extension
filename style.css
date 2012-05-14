@@ -1,0 +1,17 @@
+/**
+ * Google Chrome Extension: Chef
+ * Coded using Rapid PHP 2011 11.22
+ * (c) 2011-2012 Filip Oščádal <filip@mxd.cz>
+ * Published under GNU GPL v3+ license
+ */
+
+
+body {
+	font-family: Helvetica;
+	font-size: smaller;
+	cursor: default;
+}
+
+button, td {
+	cursor: pointer;
+}

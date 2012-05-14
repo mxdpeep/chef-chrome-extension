@@ -1,0 +1,93 @@
+<html>
+<head>
+<script type="text/javascript" src="preferences.js"></script>
+<script type="text/javascript">
+
+/**
+ * Google Chrome Extension: Chef
+ * Coded using Rapid PHP 2011 11.22
+ * (c) 2011-2012 Filip Oščádal <filip@mxd.cz>
+ * Published under GNU GPL v3+ license
+ */
+
+
+// make application prefs global
+window.prefs = prefs;
+
+// @var int timer
+var t;
+
+// @var int click counter
+var c = 0;
+
+
+// Chrome event - toolbar button clicked
+chrome.browserAction.onClicked.addListener(function(tab)
+{
+	c++;
+	if (t) clearTimeout(t);
+
+	t = setTimeout('reset();', window.prefs.clickTimeout);
+
+	return true;
+});
+
+// reset counter and cast action (click or double click)
+function reset()
+{
+
+	// parse current tab domain
+	if (c == 1) chrome.tabs.executeScript(null,
+	{
+		file: window.prefs.contentScript
+	});
+
+	// show all cookies = manager
+	if (c > 1) chrome.tabs.create(
+	{
+		url: window.prefs.manager,
+		selected: true
+	});
+
+	c = 0;
+
+	return true;
+}
+
+// add event listener for "current tab domain message"
+chrome.extension.onConnect.addListener(function(port)
+{
+
+	// wait for the message
+	port.onMessage.addListener(function(m)
+	{
+		// is there an address or is it blank?
+		if (m.address)
+		{
+			// launch manager, add domain as parameter
+			chrome.tabs.create(
+			{
+				url: window.prefs.manager + '?address=' + m.address,
+				selected: true
+			});
+		}
+		else
+		{
+			// launch manager
+			chrome.tabs.create(
+			{
+				url: window.prefs.manager,
+				selected: true
+			});
+		}
+
+
+		return true;
+	});
+
+	return true;
+});
+
+</script>
+</head>
+</html>

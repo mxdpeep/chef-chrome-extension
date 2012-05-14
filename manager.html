@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Chef - Expert in cookies</title>
+<link rel="stylesheet" type="text/css" href="style.css">
+<script type="text/javascript" src="clipboard.js"></script>
+<script type="text/javascript" src="notification.js"></script>
+<script type="text/javascript" src="preferences.js"></script>
+<script type="text/javascript">
+
+/**
+ * Google Chrome Extension: Chef
+ * Coded using Rapid PHP 2011 11.22
+ * (c) 2011-2012 Filip Oščádal <filip@mxd.cz>
+ * Published under GNU GPL v3+ license
+ */
+
+
+// make application prefs global
+window.prefs = prefs;
+
+Notification.prefs.title = 'Chef';
+Notification.prefs.timeout = 2000;
+
+
+// @const Esc key scan code
+var ESCAPE_KEY = 27;
+
+
+// Following code is based on the original Cookie API example extension by Google Inc.
+
+function Timer()
+{
+	this.start_ = new Date();
+
+	this.elapsed = function()
+	{
+		return (new Date()) - this.start_;
+	}
+
+	this.reset = function()
+	{
+		this.start_ = new Date();
+	}
+}
+
+function cookieMatch(c1, c2)
+{
+	return (c1.name == c2.name) && (c1.domain == c2.domain) &&
+	(c1.hostOnly == c2.hostOnly) && (c1.path == c2.path) &&
+	(c1.secure == c2.secure) && (c1.httpOnly == c2.httpOnly) &&
+	(c1.session == c2.session) && (c1.storeId == c2.storeId);
+}
+
+function sortedKeys(array)
+{
+	var keys = [];
+
+	for (var i in array)
+	{
+		keys.push(i);
+	}
+
+	keys.sort();
+
+	return keys;
+}
+
+function $(selector)
+{
+	return document.querySelector(selector);
+}
+
+function CookieCache()
+{
+	this.cookies_ = {};
+
+	this.reset = function()
+	{
+		this.cookies_ = {};
+	};
+
+	this.add = function(cookie)
+	{
+		var domain = cookie.domain;
+
+		if (!this.cookies_[domain])
+		{
+			this.cookies_[domain] = [];
+		}
+		this.cookies_[domain].push(cookie);
+	};
+
+	this.remove = function(cookie)
+	{
+		var domain = cookie.domain;
+
+		if (this.cookies_[domain])
+		{
+			var i = 0;
+
+			while (i < this.cookies_[domain].length)
+			{
+				if (cookieMatch(this.cookies_[domain][i], cookie))
+				{
+					this.cookies_[domain].splice(i, 1);
+				}
+				else
+				{
+					i++;
+				}
+			}
+
+			if (this.cookies_[domain].length == 0)
+			{
+				delete this.cookies_[domain];
+			}
+		}
+	};
+
+	this.getDomains = function(filter)
+	{
+		var result = [];
+
+		sortedKeys(this.cookies_).forEach(function(domain)
+		{
+			if (!filter || domain.indexOf(filter) != -1)
+			{
+				result.push(domain);
+			}
+		});
+
+		return result;
+	};
+
+	this.getCookies = function(domain)
+	{
+		return this.cookies_[domain];
+	};
+
+	this.getValues = function(domain)
+	{
+		var result = [];
+
+		var x = this.cookies_[domain];
+		for (var i = 0, l = x.length; i < l; i++) result.push(x[i].name + '=' + x[i].value);
+
+		return result.join("\n");
+	};
+}
+
+var cache = new CookieCache();
+
+function removeAllForFilter()
+{
+	var filter = $("#filter").value.toLowerCase();
+	var timer = new Timer();
+
+	cache.getDomains(filter).forEach(function(domain)
+	{
+		removeCookiesForDomain(domain);
+	});
+}
+
+function removeAll()
+{
+	var all_cookies = [];
+
+	cache.getDomains().forEach(function(domain)
+	{
+		cache.getCookies(domain).forEach(function(cookie)
+		{
+			all_cookies.push(cookie);
+		});
+	});
+
+	cache.reset();
+
+	var count = all_cookies.length;
+	var timer = new Timer();
+
+	for (var i = 0; i < count; i++)
+	{
+		removeCookie(all_cookies[i]);
+	}
+
+	timer.reset();
+	chrome.cookies.getAll({}, function(cookies)
+	{
+		for (var i in cookies)
+		{
+			cache.add(cookies[i]);
+			removeCookie(cookies[i]);
+		}
+	});
+}
+
+function removeCookie(cookie)
+{
+	var url = "http" + (cookie.secure ? "s" : "") + "://" + cookie.domain + cookie.path;
+
+	chrome.cookies.remove(
+	{
+		"url": url,
+		"name": cookie.name
+	});
+}
+
+function removeCookiesForDomain(domain)
+{
+	var timer = new Timer();
+
+	cache.getCookies(domain).forEach(function(cookie)
+	{
+		removeCookie(cookie);
+	});
+}
+
+function resetTable()
+{
+	var table = $("#cookies");
+
+	while (table.rows.length > 0)
+	{
+		table.deleteRow(table.rows.length - 1);
+	}
+}
+
+var reload_scheduled = false;
+
+function scheduleReloadCookieTable()
+{
+	if (!reload_scheduled)
+	{
+		reload_scheduled = true;
+		setTimeout(reloadCookieTable, window.prefs.scheduler);
+	}
+}
+
+function reloadCookieTable()
+{
+	reload_scheduled = false;
+	var filter = $("#filter").value.toLowerCase();
+	var domains = cache.getDomains(filter);
+
+	$("#filter_count").innerText = domains.length;
+	$("#total_count").innerText = cache.getDomains().length;
+	$("#delete_all_button").innerHTML = '';
+
+	if (domains.length)
+	{
+		var button = document.createElement("button");
+		button.onclick = removeAllForFilter;
+		button.innerText = "delete all listed cookies: " + domains.length;
+		$("#delete_all_button").appendChild(button);
+	}
+
+	if (domains.length && !filter.length)
+	{
+		$("#delall").style.display = 'none';
+	}
+	else
+	{
+		$("#delall").style.display = 'block';
+	}
+
+	resetTable();
+
+	var table = $("#cookies");
+	domains.forEach(function(domain)
+	{
+		var cookies = cache.getCookies(domain);
+		var row = table.insertRow(-1);
+		row.title = cache.getValues(domain);
+
+		row.onclick = function()
+		{
+			Clipboard.copy(this.title);
+			Notification.show(this.title.length + ' bytes copied to clipboard.');
+		}
+
+		// set rollover
+		row.onmouseover = function()
+		{
+			this.style.color = '#fff';
+			this.style.backgroundColor = '#888';
+		}
+
+		// unset rollover
+		row.onmouseout = function()
+		{
+			this.style.color = '';
+			this.style.backgroundColor = '';
+		}
+
+		row.insertCell(-1).innerText = domain;
+
+		var cell = row.insertCell(-1);
+		cell.innerText = "#" + cookies.length;
+
+		// add delete button
+		var button = document.createElement("button");
+		button.innerText = 'delete';
+		button.onclick = (function(dom)
+		{
+			return function()
+			{
+				removeCookiesForDomain(dom);
+			};
+		}(domain));
+
+		var cell = row.insertCell(-1);
+		cell.appendChild(button);
+	});
+}
+
+function focusFilter()
+{
+	$("#filter").focus();
+}
+
+function resetFilter()
+{
+	var filter = $("#filter");
+
+	filter.focus();
+
+	if (filter.value.length > 0)
+	{
+		filter.value = '';
+		reloadCookieTable();
+	}
+}
+
+// set keyboard handler
+window.onkeydown = function(event)
+{
+	if (event.keyCode == ESCAPE_KEY)
+	{
+		resetFilter();
+	}
+}
+
+function listener(info)
+{
+	cache.remove(info.cookie);
+
+	if (!info.removed)
+	{
+		cache.add(info.cookie);
+	}
+	scheduleReloadCookieTable();
+}
+
+// cookie listener set
+function startListening()
+{
+	chrome.cookies.onChanged.addListener(listener);
+}
+
+// cookie listener unset
+function stopListening()
+{
+	chrome.cookies.onChanged.removeListener(listener);
+}
+
+function onload()
+{
+	// test OS and replace some Unicode chars for Windows
+	var patt = /(linux|mac)/i;
+	if (!patt.test(navigator.userAgent))
+	{
+		$("#t1").innerText = 'filter';
+		$("#t2").innerText = 'X';
+	}
+
+	// check for address parameter in URL
+	var filter, p;
+	var regex = new RegExp("[\\?&]address=([^&#]*)");
+	var results = regex.exec(window.location.href);
+	if (results == null)
+	{
+		filter = '';
+	}
+	else
+	{
+		// parse the domain
+		filter = results[1];
+		p = filter.split('.');
+		while (p.length > 2)
+		{
+			p.shift();
+		}
+		p.unshift('');
+		filter = p.join('.');
+	}
+
+	var f = $("#filter");
+	f.value = filter.toLowerCase();
+
+	focusFilter();
+
+	// setup cookie monitor
+	var timer = new Timer();
+	chrome.cookies.getAll({}, function(cookies)
+	{
+		startListening();
+		start = new Date();
+		for (var i in cookies)
+		{
+			cache.add(cookies[i]);
+		}
+		timer.reset();
+		reloadCookieTable();
+	});
+}
+
+</script>
+</head>
+<body onload="onload();" onclick="focusFilter();">
+<span id="t1">⌨</span> <input id="filter" type="text" title="pres Esc to clear filter" oninput="reloadCookieTable();"><button id="t2" onclick="resetFilter();">✗</button> <span id="filter_count"></span> / <span id="total_count"></span> domains <span id="delete_all_button"></span> <button id="delall" style="float:right;display:none;" onclick="removeAll();">delete all cookies</button>
+<table id="cookies" style="border-collapse:collapse;"></table>
+</body>
+</html>
